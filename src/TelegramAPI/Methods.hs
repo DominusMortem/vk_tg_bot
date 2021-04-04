@@ -54,7 +54,7 @@ keyboard m = setRequestHost telegramHost
             $ defaultRequest
     where params = [ ("chat_id", Just $ BS.pack (show $ ctId m))
                    , ("text", Just $ BS.pack $ "Select the number of\nrepetitions of your message")
-                   , ("reply_markup", Just $ BS.pack $ LBC.unpack $ encode myKeyboard)]
+                   , ("reply_markup", Just $ BS.pack $ LBC.unpack $ encode inlineKeyboard)]
           keyboardButton = [ InlineKeyboardButton "1" (Just "1")
                            , InlineKeyboardButton "2" (Just "2")
                            , InlineKeyboardButton "3" (Just "3")
