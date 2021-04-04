@@ -70,7 +70,7 @@ keyboard peer rand = setRequestHost apiHost
       params = [ ("user_id",      Just $ BS.pack (show $ peer))
            , ("random_id",    Just $ BS.pack (show $ rand)) 
            , ("message",      Just $ BS.pack $ "Select the number of\nrepetitions of your message")
-           , ("keyboard",     Just $ BS.pack $ LBC.unpack $ encode keyboards)
+           , ("keyboard",     Just $ BS.pack $ LBC.unpack $ encode inlineKeyboard)
            , ("access_token", Just $ BS.pack vktoken)
            , ("v",            Just ver_api)]
       keyboardButton = [ Buttons (Action "text" "1" "1") "primary"
