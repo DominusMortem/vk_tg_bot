@@ -6,4 +6,5 @@ data Handle = Handle
     { initBot  :: IO B.ByteString
     , updateBot :: Int -> IO B.ByteString
     , offset :: Int
+    , dictonary :: M.Map Int String
     }
