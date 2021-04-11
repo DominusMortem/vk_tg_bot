@@ -1,31 +1,39 @@
 module Telegram where
 
-import BOTAPI
 import TelegramAPI.Types
 import TelegramAPI.Methods
+import Control.Monad.State
 import MapUser
-import Network.HTTP.Simple
-import GHC.Generics
-import Data.Maybe
-import Data.Functor
-import Control.Applicative
-import Control.Monad
-import Data.ByteString.Lazy as B
-import Data.ByteString.Char8 as BS
-import Data.Aeson
-import Data.Text 
-import Data.Text.Encoding (encodeUtf8)
-import Data.Text.IO as TIO
-import qualified Data.ByteString.Lazy.Char8 as LBC
-import qualified Data.Map as M
+import Network.HTTP.Simple (httpLBS, getResponseBody)
+import Data.Maybe (catMaybes, fromJust)
+import Data.Aeson (decode)
+import Data.ByteString.Lazy as B (ByteString)
+import qualified Data.Map as M (Map, empty, findWithDefault)
 
-new :: Handle
-new = Handle { initBot = response
-             , updateBot = responseOffset
-             , offset = 0
-             , dictonary = M.empty
-             }
+data Config = Config
+    { offset :: Int
+    , dictionary :: M.Map Int String
+    , update :: [Update]
+    , defaultRepeat :: String
+    } deriving (Show, Eq)
 
+data Handle = Handle 
+    { initBot  :: IO B.ByteString
+    , updateBot :: Int -> IO B.ByteString
+    }
+
+newConf :: Config
+newConf = Config { offset = 0
+                 , dictionary = M.empty
+                 , update = []
+                 , defaultRepeat = "1"
+                 }
+
+newHand :: Handle
+newHand = Handle { initBot = response
+                 , updateBot = responseOffset
+                 }
+         
 response :: IO B.ByteString
 response = do
     res <- httpLBS getUpdates
@@ -36,53 +44,75 @@ responseOffset id = do
     res <- httpLBS $ getUpdatesWithOffset id
     return (getResponseBody res)
 
-vib :: Handle -> IO B.ByteString
-vib hand = do
-    let id = offset hand
+
+vib :: Handle -> Config -> IO B.ByteString
+vib hand conf = do
+    let id = offset conf
     case id of
         0 -> initBot hand
         _ -> (updateBot hand) id
           
-testIO :: Handle -> IO ()
-testIO hand = do
-    res <- vib hand
+testIO :: Handle -> Config -> IO ()
+testIO hand conf = do
+    res <- vib hand conf
     let m = decode res :: Maybe UpdateRes
     case m of
-        Nothing -> testIO hand
+        Nothing -> testIO hand conf
         Just response -> do
             let rez = result response
             case rez of
-                [] -> testIO hand
-                (x:xs) -> do
-                  let up_id = update_id x
-                  let dict = dictonary hand
-                  if (message x) == Nothing
-                  then do
-                    let cb = callback_query x
-                    let d = fromJust $ data_query $ fromJust cb
-                    let a = from_id_query $ fromJust cb
-                    let dict' = (testMap' a d dict)
-                    let hand' = hand {dictonary = dict', offset = (up_id + 1)}
-                    print dict'
-                    testIO hand'
-                  else do
-                    let mes = message x
-                    let t = textT mes
-                    let u = fromId mes
-                    let dict' = (testMap u "1" dict)
-                    let hand' = hand {dictonary = dict', offset = (up_id + 1)}
-                    print dict'
-                    case t of
-                      "/help" -> do
-                        httpLBS $ sendMessage mes
-                        testIO hand'
-                      "/repeat" -> do
-                        httpLBS $ keyboard mes
-                        testIO hand'
-                      _ -> do
-                        let rep_ = read $ fromJust $ (M.lookup u dict') :: Int
-                        let rep = Prelude.take rep_ (Prelude.repeat (echoMessage mes)) 
-                        mapM_ httpLBS rep
-                        print (up_id + 1)
-                        testIO hand'
+                [] ->  testIO hand conf
+                _ -> do
+                    let up_id = Prelude.last $ Prelude.map update_id rez
+                    let conf' = conf {offset = up_id+1, update = rez}
+                    echoMes conf'
+                    helpMes conf'
+                    repeatMes conf'
+                    conf'' <- callbackMes conf'
+                    print conf''
+                    testIO hand conf''
+                        
+helpM cfg = Prelude.filter (\x -> text x == (Just "/help")) (catMaybes $ Prelude.map message (update cfg))
+repeatM cfg = Prelude.filter (\x -> text x == (Just "/repeat")) (catMaybes $ Prelude.map message (update cfg))
+callB cfg = (catMaybes $ Prelude.map callback_query (update cfg))
 
+echoMes cfg = do
+    mapM_ copyM $ echoM_ cfg
+    return ()
+    where copyM x = httpLBS $ echoMessage x
+
+helpMes cfg = do
+    mapM_ hlp $ helpM cfg
+    return ()
+    where hlp x = httpLBS $ sendMessage x
+
+repeatMes cfg = do
+    mapM_ repeats $ repeatM cfg
+    return ()
+    where repeats x = httpLBS $ keyboard x
+
+callbackMes cfg = do
+    let dict = dictionary cfg
+        upd = callB cfg
+        dict' = execState (mapM_ mapSt $ idQuery upd) dict
+    return cfg {dictionary = dict'}
+
+idQuery upd = Prelude.map func upd
+    where func x = (from_id_query x, fromJust $ data_query x)
+
+run :: IO ()
+run = do
+    testIO newHand newConf
+
+
+echoM_ cfg = Prelude.concat (Prelude.map repeats (updates upd))
+    where
+        upd = update cfg
+        rep = defaultRepeat cfg
+        dict = dictionary cfg
+        updates u = Prelude.filter (\x -> text x /= (Just "/help") && 
+                                  text x /= (Just "/repeat")) 
+                           (catMaybes $ Prelude.map message u)
+        repeats x = Prelude.take (read $ newRepeat x :: Int) $ Prelude.repeat x
+        newRepeat x = M.findWithDefault (rep)
+                                      (from_id x) dict
