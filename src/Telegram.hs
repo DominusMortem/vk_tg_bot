@@ -98,9 +98,9 @@ callbackMes cfg = do
         query = callB upd
         dict' = execState (mapM_ mapSt $ idQuery query) dict
     return cfg {dictionary = dict'}
-
-idQuery query = Prelude.map func query
-    where func x = (from_id_query x, fromJust $ data_query x)
+    where 
+        idQuery query = Prelude.map func query
+        func x = (from_id_query x, fromJust $ data_query x)
 
 run :: IO ()
 run = do
