@@ -8,7 +8,7 @@ import Network.HTTP.Simple (httpLBS, getResponseBody)
 import Data.Maybe (catMaybes, fromJust)
 import Data.Aeson (decode)
 import Data.ByteString.Lazy as B (ByteString)
-import qualified Data.Map as M (Map, empty, findWithDefault)
+import qualified Data.Map as M (Map, empty)
 
 data Config = Config
     { offset :: Int
@@ -72,47 +72,36 @@ testIO hand conf = do
                     print conf''
                     testIO hand conf''
                         
-helpM cfg = Prelude.filter (\x -> text x == (Just "/help")) (catMaybes $ Prelude.map message (update cfg))
-repeatM cfg = Prelude.filter (\x -> text x == (Just "/repeat")) (catMaybes $ Prelude.map message (update cfg))
-callB cfg = (catMaybes $ Prelude.map callback_query (update cfg))
-
 echoMes cfg = do
-    mapM_ copyM $ echoM_ cfg
+    mapM_ copyM $ echoM_ upd rep dict
     return ()
     where copyM x = httpLBS $ echoMessage x
+          upd = update cfg
+          rep = defaultRepeat cfg
+          dict = dictionary cfg
 
 helpMes cfg = do
-    mapM_ hlp $ helpM cfg
+    mapM_ hlp $ helpM upd
     return ()
     where hlp x = httpLBS $ sendMessage x
+          upd = update cfg
 
 repeatMes cfg = do
-    mapM_ repeats $ repeatM cfg
+    mapM_ repeats $ repeatM upd
     return ()
     where repeats x = httpLBS $ keyboard x
+          upd = update cfg
 
 callbackMes cfg = do
     let dict = dictionary cfg
-        upd = callB cfg
-        dict' = execState (mapM_ mapSt $ idQuery upd) dict
+        upd = update cfg
+        query = callB upd
+        dict' = execState (mapM_ mapSt $ idQuery query) dict
     return cfg {dictionary = dict'}
 
-idQuery upd = Prelude.map func upd
+idQuery query = Prelude.map func query
     where func x = (from_id_query x, fromJust $ data_query x)
 
 run :: IO ()
 run = do
     testIO newHand newConf
-
-
-echoM_ cfg = Prelude.concat (Prelude.map repeats (updates upd))
-    where
-        upd = update cfg
-        rep = defaultRepeat cfg
-        dict = dictionary cfg
-        updates u = Prelude.filter (\x -> text x /= (Just "/help") && 
-                                  text x /= (Just "/repeat")) 
-                           (catMaybes $ Prelude.map message u)
-        repeats x = Prelude.take (read $ newRepeat x :: Int) $ Prelude.repeat x
-        newRepeat x = M.findWithDefault (rep)
-                                      (from_id x) dict
