@@ -1,15 +1,8 @@
 module TelegramAPI.Types where
 
-import Network.HTTP.Simple
 import GHC.Generics
-import Data.Maybe
-import Data.Functor
-import Control.Applicative
-import Control.Monad
-import Data.ByteString.Lazy as B
-import Data.ByteString.Char8 as BS
 import Data.Aeson
-import Data.Text 
+import Data.Text (Text) 
 
 data ResponseTelegram a = ResponseTelegram 
     { result      :: a
@@ -27,7 +20,7 @@ data Message = Message
     { message_id :: Int
     , from_id    :: Int
     , user_id    :: Int
-    , text       :: Text  
+    , text       :: Maybe Text
     } deriving (Show, Eq)
 
 instance FromJSON Message where
@@ -35,7 +28,7 @@ instance FromJSON Message where
       message_id <- v .: "message_id"
       from <- v .: "from"
       chat <- v .: "chat"
-      text <- v .: "text"
+      text <- v .:? "text"
       from_id <- from .: "id"
       user_id <- chat .: "id"
       return Message{..}
