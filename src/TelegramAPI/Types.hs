@@ -20,8 +20,8 @@ type UpdateRes = ResponseTelegram [Update]
 
 data Update = Update
     { update_id        :: Int
-    , message   :: Maybe Message
-    , callback_query :: Maybe CallbackQuery
+    , message          :: Maybe Message
+    , callback_query   :: Maybe CallbackQuery
     } deriving (Show, Eq, FromJSON, Generic)
 
 data Message = Message
@@ -34,11 +34,11 @@ data Message = Message
 instance FromJSON Message where
     parseJSON = withObject "message" $ \v -> do
       message_id <- v .: "message_id"
-      fromM <- v .: "from"
-      chat <- v .: "chat"
-      text <- v .:? "text"
-      from_id <- fromM .: "id"
-      chat_id <- chat .: "id"
+      fromM      <- v .: "from"
+      chat       <- v .: "chat"
+      text       <- v .:? "text"
+      from_id    <- fromM .: "id"
+      chat_id    <- chat .: "id"
       return Message{..}
 
 data CallbackQuery = CallbackQuery
@@ -48,8 +48,8 @@ data CallbackQuery = CallbackQuery
 
 instance FromJSON CallbackQuery where
     parseJSON = withObject "callback_query" $ \v -> do
-      fromC <- v .: "from"
-      data_query <- v .:? "data"
+      fromC         <- v .: "from"
+      data_query    <- v .:? "data"
       from_id_query <- fromC .: "id"
       return CallbackQuery{..}
 
@@ -64,11 +64,11 @@ data InlineKeyboardButton = InlineKeyboardButton
 
 instance FromJSON InlineKeyboardButton where
     parseJSON = withObject "inline_keyboard" $ \v -> do
-      text_bttn <- v .: "text"
+      text_bttn          <- v .: "text"
       callback_data_bttn <- v .: "callback_data"
       return InlineKeyboardButton {..}
 
 instance ToJSON InlineKeyboardButton where
     toJSON InlineKeyboardButton{..} = 
-      object [ "text"    .= text_bttn
+      object [ "text"          .= text_bttn
              , "callback_data" .= callback_data_bttn ]
