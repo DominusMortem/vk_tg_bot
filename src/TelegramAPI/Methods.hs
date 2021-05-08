@@ -8,7 +8,7 @@ module TelegramAPI.Methods
     , helpM
     , repeatM
     , callB
-    )where
+    ) where
 
 import TelegramAPI.Types
 import Network.HTTP.Simple
@@ -76,13 +76,14 @@ keyboard cfg dict m = setRequestHost telegramHost
                                , show $ numrepeat x
                                ,"\n"
                                , messagerepeat x]
-          numrepeat x = M.findWithDefault (repeats x) (from_id m) dict
+          numrepeat x = M.findWithDefault (repeats x)
+                        (from_id m) dict
 
 echoM_ :: [Update] -> Int -> M.Map Int Int -> [Message]
 echoM_ upd rep dict = concat (map repeats (updates upd))
     where
-        updates u = filter (\x -> text x /= (Just "/help") && 
-                                  text x /= (Just "/repeat")) 
+        updates u = filter (\x -> text x /= (Just "/help")
+                               && text x /= (Just "/repeat")) 
                            (catMaybes $ map message u)
         repeats x = take (newRepeat x) $ repeat x
         newRepeat x = M.findWithDefault (rep)
