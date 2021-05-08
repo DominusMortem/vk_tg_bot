@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 53b98240477a687422db25f1375ded7d26eb18a7b3b649a00fca56b3969b81ce
+-- hash: 8a210d280c2a72738ef98cb674c46c41973546b3286d665a31eabcd8f6fe7a96
 
 name:           echo-bot
 version:        0.1.0.0
@@ -27,7 +27,8 @@ source-repository head
 
 library
   exposed-modules:
-      BOTAPI
+      Config
+      Logger
       MapUser
       Telegram
       TelegramAPI.Methods
@@ -44,8 +45,10 @@ library
       aeson
     , base >=4.7 && <5
     , bytestring
+    , configurator
     , containers
     , http-conduit
+    , http-types
     , mtl
     , text
     , utf8-string
@@ -58,14 +61,16 @@ executable echo-bot-exe
   hs-source-dirs:
       app
   default-extensions: OverloadedStrings DeriveGeneric DeriveAnyClass FlexibleContexts RankNTypes RecordWildCards
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall -Werror
   build-depends:
       aeson
     , base >=4.7 && <5
     , bytestring
+    , configurator
     , containers
     , echo-bot
     , http-conduit
+    , http-types
     , mtl
     , text
     , utf8-string
@@ -84,9 +89,11 @@ test-suite echo-bot-test
       aeson
     , base >=4.7 && <5
     , bytestring
+    , configurator
     , containers
     , echo-bot
     , http-conduit
+    , http-types
     , mtl
     , text
     , utf8-string

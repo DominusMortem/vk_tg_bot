@@ -1,41 +1,61 @@
-module VKAPI.Types where
+module VKAPI.Types 
+    ( Init (..)
+    , InitValue (..)
+    , ErrorInit (..)
+    , ResponseVK (..)
+    , UpdateVK
+    , Update (..)
+    , ObjectVK (..)
+    , Message (..)
+    , Buttons (..)
+    , Keyboard (..)
+    , Action (..)
+    ) where
 
-import Network.HTTP.Simple
-import GHC.Generics
-import Data.Maybe
-import Data.Functor
-import Control.Applicative
-import Control.Monad
-import Data.ByteString.Lazy as B
-import Data.ByteString.Char8 as BS
+import GHC.Generics  (Generic)
 import Data.Aeson
-import Data.Text 
+import Data.Text     (Text)
+
+data Init = Init
+    { response :: Maybe InitValue
+    , error :: Maybe ErrorInit
+    } deriving (Show, Eq, Generic, FromJSON)
 
 data InitValue = InitValue
     { key    :: String
     , server :: String
     , ts_s     :: String 
-    } deriving Show
+    } deriving (Show, Eq)
 
 instance FromJSON InitValue where
     parseJSON = withObject "response" $ \v -> do
-      res <- v .: "response"
-      key <- res .: "key"
-      server <- res .: "server"
-      ts_s <- res .: "ts"
+      key <- v .: "key"
+      server <- v .: "server"
+      ts_s <- v .: "ts"
       return InitValue{..}
+
+data ErrorInit = ErrorInit
+    { error_code :: Int
+    , error_msg :: String
+    } deriving (Show, Eq)
+
+instance FromJSON ErrorInit where
+    parseJSON = withObject "error" $ \v -> do
+      error_code <- v .: "error_code"
+      error_msg <- v .: "error_msg"
+      return ErrorInit {..}
 
 data ResponseVK a = ResponseVK
     { ts :: String
     , updates :: a
-    } deriving (Show, Generic, FromJSON)
+    } deriving (Show, Eq, Generic, FromJSON)
 
 type UpdateVK = ResponseVK [Update]
 
 data Update = Update
     { type_u :: String
     , object_u :: ObjectVK
-    } deriving Show
+    } deriving (Show, Eq)
 
 instance FromJSON Update where
     parseJSON = withObject "updates" $ \v -> do
@@ -45,7 +65,7 @@ instance FromJSON Update where
 
 data ObjectVK = ObjectVK
     { message :: Maybe Message
-    } deriving (Show, Generic, FromJSON)
+    } deriving (Show, Eq, Generic, FromJSON)
 
 data Message = Message
     { id_mes :: Int
@@ -53,7 +73,7 @@ data Message = Message
     , random_id :: Int
     , text :: Text
     , payload :: Maybe String
-    } deriving Show
+    } deriving (Show, Eq)
 
 instance FromJSON Message where
     parseJSON = withObject "message" $ \v -> do
@@ -68,18 +88,18 @@ data Keyboard = Keyboard
     { one_time :: Bool
     , buttons :: [[Buttons]]
     , inline :: Bool
-    } deriving (Show, Generic, FromJSON, ToJSON)
+    } deriving (Show, Eq, Generic, FromJSON, ToJSON)
   
 data Buttons = Buttons
   { action :: Action
   , color :: String
-  } deriving (Show, Generic, FromJSON, ToJSON)
+  } deriving (Show, Eq, Generic, FromJSON, ToJSON)
   
 data Action = Action
   { typeAct :: String
   , labelAct :: String
   , payloadAct :: String
-  } deriving (Show, Generic)
+  } deriving (Show, Eq, Generic)
   
 instance FromJSON Action where
     parseJSON = withObject "action" $ \v -> do

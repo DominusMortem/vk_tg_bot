@@ -1,85 +1,113 @@
-module VKAPI.Methods where
+module VKAPI.Methods 
+    ( getLongPollServer
+    , getLongPollAPI
+    , echoMessage
+    , sendMessage
+    , keyboard
+    , payloadM
+    , echoM
+    , repeatM
+    , helpM
+    )where
 
 import VKAPI.Types
+import Config
 import Network.HTTP.Simple
-import GHC.Generics
-import Data.Maybe
-import Data.Functor
-import Control.Applicative
-import Control.Monad
-import Data.ByteString.Lazy as B
-import Data.ByteString.Char8 as BS
-import Data.Aeson
-import Data.Text 
-import Data.Text.Encoding (encodeUtf8)
-import Data.Text.IO as TIO
+import Data.Maybe                                   (catMaybes)
+import Data.Aeson                                   (encode)
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy.Char8 as LBC
+import qualified Data.Map as M
 
-vktoken :: String
-vktoken = "a760727e1d2397f34e294a6d5ea7a76f29ad80ffd4cde8ebcad71586b51ec071f9c74fc57416c41a62e51"
-
-group_id :: Int
-group_id = 203655745
-
-ver_api :: BS.ByteString
+ver_api :: BC.ByteString
 ver_api = "5.130"
 
-apiHost :: BS.ByteString
+apiHost :: BC.ByteString
 apiHost = "api.vk.com"
 
-getLongPollServer = setRequestHost apiHost
+getLongPollServer :: Config -> Request
+getLongPollServer cfg = setRequestHost apiHost
                      $ setRequestQueryString params
                      $ setRequestPath "/method/groups.getLongPollServer"
                      $ defaultRequest
-    where params = [ ("group_id", Just $ BS.pack (show $ group_id))
-                   , ("access_token", Just $ BS.pack vktoken)
+    where params = [ ("group_id", Just $ BC.pack (show $ group_id cfg))
+                   , ("access_token", Just $ BC.pack $ token cfg)
                    , ("v", Just $ ver_api)]
 
-getLongPollAPI sv key_ tS = setRequestQueryString params
-                     $ parseRequest_ sv
-    where params = [ ("act", Just $ BS.pack ("a_check"))
-                   , ("key", Just $ BS.pack key_)
-                   --, ("wait", Just $ BS.pack ("25"))
-                   , ("ts", Just $ BS.pack (show $ tS))]
+getLongPollAPI :: InitValue -> Config -> Request
+getLongPollAPI initial conf = setRequestQueryString params
+                     $ parseRequest_ $ server initial
+    where params = [ ("act", Just $ BC.pack ("a_check"))
+                   , ("key", Just $ BC.pack $ key initial)
+                   , ("wait", Just $ BC.pack $ show $ timeout conf)
+                   , ("ts", Just $ BC.pack $ ts_s initial)]
 
-echoMessage idmes peer rand = setRequestHost apiHost
+echoMessage :: Config -> Message -> Request
+echoMessage cfg upd = setRequestHost apiHost
                      $ setRequestQueryString params
                      $ setRequestPath "/method/messages.send"
                      $ defaultRequest
-    where params = [ ("user_id", Just $ BS.pack (show $ peer))
-                   , ("random_id", Just $ BS.pack (show $rand))
-                   , ("forward_messages", Just $ BS.pack (show $ idmes))
-                   , ("access_token", Just $ BS.pack vktoken)
+    where params = [ ("access_token", Just $ BC.pack $ token cfg)
+                   , ("user_id", Just $ BC.pack (show $ from_id upd))
+                   , ("random_id", Just $ BC.pack (show $ random_id upd))
+                   , ("forward_messages", Just $ BC.pack (show $ id_mes upd))
                    , ("v", Just $ ver_api)]
 
-sendMessage peer rand = setRequestHost apiHost
+sendMessage :: Config -> Message -> Request
+sendMessage cfg upd = setRequestHost apiHost
                      $ setRequestQueryString params
                      $ setRequestPath "/method/messages.send"
                      $ defaultRequest
-    where params = [ ("user_id", Just $ BS.pack (show $ peer))
-                   , ("random_id", Just $ BS.pack (show $ rand))
-                   , ("access_token", Just $ BS.pack vktoken)
-                   , ("message", Just $ BS.pack "/help - for help\n/repeat - for repeat")
-                   , ("v", Just ver_api)]
+    where params = [ ("user_id", Just $ BC.pack (show $ from_id upd))
+                   , ("random_id", Just $ BC.pack (show $ random_id upd))
+                   , ("access_token", Just $ BC.pack $ token cfg)
+                   , ("message", Just $ BC.pack $ messagehelp cfg)
+                   , ("v", Just ver_api)]         
 
-keyboard peer rand = setRequestHost apiHost
+keyboard :: Config -> M.Map Int Int -> Message -> Request
+keyboard cfg dict upd = setRequestHost apiHost
                      $ setRequestQueryString params
                      $ setRequestPath "/method/messages.send"
                      $ defaultRequest
+    where params = [ ("user_id",      Just $ BC.pack (show $ from_id upd))
+                   , ("random_id",    Just $ BC.pack (show $ random_id upd)) 
+                   , ("message",      Just $ BC.pack $ forRepeat cfg)
+                   , ("keyboard",     Just $ BC.pack $ LBC.unpack $ encode inlineKeyboard)
+                   , ("access_token", Just $ BC.pack $ token cfg)
+                   , ("v",            Just ver_api)]
+          keyboardButton = [ Buttons (Action "text" "1" "1") "primary"
+                           , Buttons (Action "text" "2" "2") "primary"
+                           , Buttons (Action "text" "3" "3") "primary"
+                           , Buttons (Action "text" "4" "4") "primary"
+                           , Buttons (Action "text" "5" "5") "primary"]
+          inlineKeyboard =  Keyboard  False [keyboardButton] True 
+
+          forRepeat x = concat ["Current number of repetitions "
+                               , show $ numrepeat x
+                               ,"\n"
+                               , messagerepeat x]
+          numrepeat x = M.findWithDefault (repeats x) (from_id upd) dict
+
+
+payloadM :: [Update] -> [Message]
+payloadM upd = filter (\x -> payload x /= Nothing) (catMaybes $ map (message . object_u) upd)
+
+
+echoM :: [Update] -> Int -> M.Map Int Int -> [Message]
+echoM upd rep dict = concat (map repeats (updates upd))
     where
-      params = [ ("user_id",      Just $ BS.pack (show $ peer))
-           , ("random_id",    Just $ BS.pack (show $ rand)) 
-           , ("message",      Just $ BS.pack $ "Select the number of\nrepetitions of your message")
-           , ("keyboard",     Just $ BS.pack $ LBC.unpack $ encode inlineKeyboard)
-           , ("access_token", Just $ BS.pack vktoken)
-           , ("v",            Just ver_api)]
-      keyboardButton = [ Buttons (Action "text" "1" "1") "primary"
-                      , Buttons (Action "text" "2" "2") "primary"
-                      , Buttons (Action "text" "3" "3") "primary"
-                      , Buttons (Action "text" "4" "4") "primary"
-                      , Buttons (Action "text" "5" "5") "primary"]
-      inlineKeyboard =  Keyboard  False [keyboardButton] True 
+        updates u = filter (\x -> text x /= "/help" && 
+                                          text x /= "/repeat" &&
+                                          payload x == Nothing)
+                                   (catMaybes $ map (message . object_u) u)
+        repeats x = take (newRepeat x) $ repeat x
+        newRepeat x = M.findWithDefault (rep)
+                                      (from_id x) dict
 
-vkKey sv = key sv
-vkServ sv = server sv
-vkTs sv = ts_s sv
+
+repeatM :: [Update] -> [Message]
+repeatM upd = filter (\x -> text x == "/repeat") (catMaybes $ map (message . object_u) upd)
+
+helpM :: [Update] -> [Message]
+helpM upd = filter (\x -> text x == "/help") (catMaybes $ map (message . object_u) upd)
+

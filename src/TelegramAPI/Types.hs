@@ -1,8 +1,16 @@
-module TelegramAPI.Types where
+module TelegramAPI.Types
+    ( ResponseTelegram (..)
+    , UpdateRes
+    , Update (..)
+    , Message (..)
+    , CallbackQuery (..)
+    , InlineKeyboardButton (..)
+    , InlineKeyboardMarkup (..)
+    ) where
 
-import GHC.Generics
+import GHC.Generics  (Generic)
 import Data.Aeson
-import Data.Text (Text) 
+import Data.Text     (Text) 
 
 data ResponseTelegram a = ResponseTelegram 
     { result      :: a
@@ -19,32 +27,30 @@ data Update = Update
 data Message = Message
     { message_id :: Int
     , from_id    :: Int
-    , user_id    :: Int
+    , chat_id    :: Int
     , text       :: Maybe Text
     } deriving (Show, Eq)
 
 instance FromJSON Message where
     parseJSON = withObject "message" $ \v -> do
       message_id <- v .: "message_id"
-      from <- v .: "from"
+      fromM <- v .: "from"
       chat <- v .: "chat"
       text <- v .:? "text"
-      from_id <- from .: "id"
-      user_id <- chat .: "id"
+      from_id <- fromM .: "id"
+      chat_id <- chat .: "id"
       return Message{..}
 
 data CallbackQuery = CallbackQuery
-    { id_query      :: Text
-    , from_id_query :: Int
+    { from_id_query :: Int
     , data_query    :: Maybe String
     } deriving (Show, Eq)
 
 instance FromJSON CallbackQuery where
     parseJSON = withObject "callback_query" $ \v -> do
-      id_query <- v .: "id"
-      from <- v .: "from"
+      fromC <- v .: "from"
       data_query <- v .:? "data"
-      from_id_query <- from .: "id"
+      from_id_query <- fromC .: "id"
       return CallbackQuery{..}
 
 data InlineKeyboardMarkup = InlineKeyboardMarkup

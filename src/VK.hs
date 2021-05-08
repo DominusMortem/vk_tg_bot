@@ -1,87 +1,147 @@
-module VK where
+module VK 
+    ( startVK
+    , newVar 
+    ) where
 
-import MapUser
+
+
 import VKAPI.Methods
 import VKAPI.Types
-import Network.HTTP.Simple
-import GHC.Generics
-import Data.Maybe
-import Data.Functor
-import Control.Applicative
-import Control.Monad
-import Data.ByteString.Lazy as B
-import Data.ByteString.Char8 as BS
-import Data.Aeson
-import Data.Text 
-import Data.Text.Encoding (encodeUtf8)
-import Data.Text.IO as TIO
-import qualified Data.ByteString.Lazy.Char8 as LBC
-import qualified Data.Map as M
+import MapUser
+import Config
+import Logger
+import Control.Monad                  (when)
+import Control.Monad.State            (execState)
+import Network.HTTP.Simple            (Response, httpLBS, getResponseBody, getResponseStatus)
+import Network.HTTP.Types.Status      (statusCode, statusMessage)
+import Data.Maybe                     (fromJust)
+import Data.Aeson                     (decode)
+import qualified Data.Map             as M
+import Prelude hiding                 (error)
 
-responseVK :: IO B.ByteString
-responseVK = do
-    res <- httpLBS getLongPollServer
-    return (getResponseBody res)
+data Variables = Variables
+    { session :: InitValue
+    , dictionary :: M.Map Int Int
+    , update :: [Update]
+    , vkerror :: String
+    } deriving (Show, Eq)
 
-responseStart :: String -> String -> Int -> IO B.ByteString
-responseStart sv key_ tS = do
-    res <- httpLBS $ getLongPollAPI sv key_ tS
-    return (getResponseBody res)
+newVar :: Variables
+newVar = Variables
+    { session = InitValue "" "" ""
+    , dictionary = M.empty
+    , update = []
+    , vkerror = ""
+    }
 
-initVK :: IO ()
-initVK = do
-    res <- responseVK
-    let m = decode res :: Maybe InitValue
-    case m of
-        Nothing -> initVK
-        Just response -> do
-            let tS = read (vkTs response) :: Int
-            let serv = server response
-            let key_ = key response
-            startVK serv key_ (tS) testData
+payloadMes :: Config -> Variables -> IO Variables 
+payloadMes conf vrb = do
+    let dict = dictionary vrb
+        upd = update vrb
+        query = payloadM upd
+        dict' = execState (mapM_ mapSt $ idQuery query) dict
+    when (((loglevel conf) <= Debug) && dict' /= dict) 
+        $ debug' (loglevel conf) "Dictiory update:" 
+        >> print (dict')
+    return vrb {dictionary = dict'}
+    where 
+        idQuery query = map func query
+        func x = (from_id x, read $ fromJust $ payload x :: Int)
 
-startVK :: String -> String -> Int -> M.Map Int String -> IO ()
-startVK serv key_ tS dict = do
-    start <- responseStart serv key_ tS
-    let m = decode start :: Maybe UpdateVK
-    case m of 
-        Nothing -> startVK serv key_ tS dict
-        Just response -> do
-            let tSnew = read (ts response) :: Int
-            let upd = updates response
-            case upd of
-                [] -> startVK serv key_ tSnew dict
-                (x:xs) -> do
-                    let typeMes = type_u x
-                    case typeMes of
-                        "message_new" -> do
-                            let mesVK = fromJust $ message $ object_u x
-                            let command = text mesVK
-                            let numRep = payload mesVK
-                            let (idMes, usid, randId) = sendData mesVK
-                            let dict' = (testMap usid "1" dict)
-                            case numRep of
-                                Nothing -> do
-                                  case command of
-                                    "/help" -> do
-                                        httpLBS $ sendMessage usid randId
-                                        startVK serv key_ tSnew dict'
-                                    "/repeat" -> do
-                                        httpLBS $ keyboard usid randId
-                                        startVK serv key_ tSnew dict'
-                                    _ -> do
-                                        let rep_ = read $ fromJust $ (M.lookup usid dict') :: Int
-                                        let rep = Prelude.take rep_ (Prelude.repeat (echoMessage idMes usid randId)) 
-                                        forM_ rep httpLBS
-                                        startVK serv key_ tSnew dict'
-                                Just pay -> do
-                                    let dict' = (testMap' usid pay dict)
-                                    print dict'
-                                    startVK serv key_ tSnew dict'
-                        _ -> startVK serv key_ tSnew dict
+echoMes :: Config -> Variables -> IO () 
+echoMes conf vrb = do
+    let rep = repeats conf 
+    r <- mapM (copyM  conf) $ echoM upd rep dict
+    mapM_ (errorResponse (loglevel conf)) r
+    let body = map getResponseBody r
+    when (((loglevel conf) <= Info) && body /= []) 
+        $ info' (loglevel conf) "Result response echoMes" 
+        >> print (body)
+    where copyM a x = httpLBS $ echoMessage a x
+          upd = update vrb
+          dict = dictionary vrb
 
-sendData :: Message -> (Int, Int, Int)
-sendData mess = (idMes, usid, randId)
-    where idMes = id_mes mess
-          usid = from_id mess
-          randId = random_id mess
+repeatMes :: Config -> Variables -> IO () 
+repeatMes conf vrb = do
+    r <- mapM (rept conf $ dict) $ repeatM upd
+    mapM_ (errorResponse (loglevel conf)) r
+    let body = map getResponseBody r
+    when (((loglevel conf) <= Info) && body /= []) 
+        $ info' (loglevel conf) "Result response repeatMes" 
+        >> print (body)
+    where rept a d x = httpLBS $ keyboard a d x
+          upd = update vrb
+          dict = dictionary vrb
+
+helpMes :: Config -> Variables -> IO () 
+helpMes conf vrb = do
+    r <- mapM (hlp conf) $ helpM upd
+    mapM_ (errorResponse (loglevel conf)) r
+    let body = map getResponseBody r
+    when (((loglevel conf) <= Info) && body /= []) 
+        $ info' (loglevel conf) "Result response helpMes" 
+        >> print (body)
+    where hlp a x = httpLBS $ sendMessage a x
+          upd = update vrb
+
+initVK :: Config -> Variables -> IO Variables
+initVK conf vrb = do
+    when ((loglevel conf) <= Debug) 
+        $ debug' (loglevel conf) "Initialization VK....."
+    initRes <- httpLBS $ getLongPollServer conf
+    errorResponse (loglevel conf) initRes
+    let bodyRes = getResponseBody initRes
+        decRes = decode bodyRes :: Maybe Init
+    when ((loglevel conf) <= Debug) 
+        $ debug' (loglevel conf) "Result initVK" >> print bodyRes
+    case decRes of
+        Nothing -> initVK conf vrb
+        Just initial -> do
+            if (response initial) /= Nothing
+            then do
+                let vrb' = vrb {session = fromJust $ response initial}
+                return vrb'
+            else do
+                let vkerr = error_msg $ fromJust $ error initial
+                return vrb {vkerror = vkerr}
+
+startVK :: Config -> Variables -> IO ()
+startVK conf vrb = do
+    case (ts_s $ session vrb) of
+        "" -> do
+            initconf <- initVK conf vrb
+            if (vkerror initconf /= "")
+            then print $ vkerror initconf
+            else startVK conf initconf
+        _ -> do
+            let sess = session vrb
+            updRes <- httpLBS $ getLongPollAPI sess conf
+            errorResponse (loglevel conf) updRes
+            let bodyRes = (getResponseBody updRes)
+                decRes = decode bodyRes :: Maybe UpdateVK
+            when ((loglevel conf) <= Debug) 
+                $ debug' (loglevel conf) "Result getLongPoll" >> print bodyRes
+            case decRes of 
+                Nothing -> do
+                    when ((loglevel conf) <= Info) 
+                        $ error' (loglevel conf) "Response error. Stop BOT."
+                        >> return ()
+                Just start -> do
+                    let tsNew = ts start
+                        upd = updates start
+                        vrb' = vrb {update = upd, session = sess {ts_s = tsNew}}
+                    when (((loglevel conf) <= Debug) && (vrb' /= vrb))
+                        $ debug' (loglevel conf) "Update Variables" >> print vrb'
+                    helpMes conf vrb'
+                    repeatMes conf vrb'
+                    echoMes conf vrb'
+                    vrb'' <- payloadMes conf vrb'
+                    startVK conf vrb''
+
+errorResponse :: LogLvl -> Response a -> IO ()                       
+errorResponse lg resp = do
+    let body = getResponseStatus resp
+    when ((lg <= Error) && (statusCode body /= 200 )) 
+        $ error' lg "Response error" 
+        >> print (statusCode body)
+        >> print (statusMessage body)

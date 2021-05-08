@@ -1,10 +1,11 @@
-module MapUser where
+module MapUser 
+    ( mapSt
+    ) where
 
 import Control.Monad.State (State, get, put)
-import qualified Data.Map  as M
-import Data.Text 
+import qualified Data.Map   as M
 
-mapSt :: (Int, String) -> State (M.Map Int String) ()
+mapSt :: (Int, Int) -> State (M.Map Int Int) ()
 mapSt (k, v) = do
     dict <- get
     put (M.insert k v dict)

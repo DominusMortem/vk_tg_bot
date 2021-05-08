@@ -1,110 +1,146 @@
-module Telegram where
+module Telegram 
+    ( startTG
+    , newVarT
+    ) where
 
 import TelegramAPI.Types
 import TelegramAPI.Methods
-import Control.Monad.State            (State, execState)
+import Config
+import Logger
+import Control.Monad                  (when)
+import Control.Monad.State            (execState)
 import MapUser
-import Network.HTTP.Simple            (httpLBS, getResponseBody)
-import Data.Maybe                     (catMaybes, fromJust)
+import Network.HTTP.Simple            (Response, httpLBS, getResponseBody, getResponseStatus)
+import Network.HTTP.Types.Status      (statusCode, statusMessage)
+import Data.Maybe                     (fromJust)
 import Data.Aeson                     (decode)
 import qualified Data.ByteString.Lazy as B
 import qualified Data.Map             as M
 
-data Config = Config
+data Variables = Variables
     { offset :: Int
-    , dictionary :: M.Map Int String
+    , dictionary :: M.Map Int Int
     , update :: [Update]
-    , defaultRepeat :: String
     } deriving (Show, Eq)
 
-data Handle = Handle 
-    { initBot  :: IO B.ByteString
-    , updateBot :: Int -> IO B.ByteString
-    }
+newVarT :: Variables
+newVarT = Variables { offset = 0
+              , dictionary = M.empty
+              , update = []
+              }
 
-newConf :: Config
-newConf = Config { offset = 0
-                 , dictionary = M.empty
-                 , update = []
-                 , defaultRepeat = "1"
-                 }
+response :: Config -> IO B.ByteString
+response conf = do
+    res <- httpLBS $ getUpdates conf
+    errorResponse (loglevel conf) res
+    let r = getResponseBody res
+    when ((loglevel conf) <= Debug)
+        $ debug' (loglevel conf) "Initialization Bot. Result response:" >> print r
+    return r
 
-newHand :: Handle
-newHand = Handle { initBot = response
-                 , updateBot = responseOffset
-                 }
-         
-response :: IO B.ByteString
-response = do
-    res <- httpLBS getUpdates
-    return (getResponseBody res)
+responseOffset :: Config -> Variables -> IO B.ByteString
+responseOffset conf vrb = do 
+    let newOffset = offset vrb 
+    res <- httpLBS $ getUpdatesWithOffset conf newOffset
+    errorResponse (loglevel conf) res
+    let r = getResponseBody res
+    when ((loglevel conf) <= Debug) 
+        $ debug' (loglevel conf) "Result responseOffset" >> print r
+    return r
 
-responseOffset :: Int -> IO B.ByteString
-responseOffset id = do 
-    res <- httpLBS $ getUpdatesWithOffset id
-    return (getResponseBody res)
+echoMes :: Config -> Variables -> IO () 
+echoMes conf vrb = do
+    let rep = repeats conf
+    r <- mapM (copyM conf) $ echoM_ upd rep dict
+    mapM_ (errorResponse (loglevel conf)) r
+    let body = map getResponseBody r
+    when (((loglevel conf) <= Info) && body /= []) 
+        $ info' (loglevel conf) "Result response echoMes" 
+        >> print (body)
+    where copyM a x = httpLBS $ echoMessage a x
+          upd = update vrb
+          dict = dictionary vrb
 
-echoMes :: Config -> IO () 
-echoMes cfg = do
-    mapM_ copyM $ echoM_ upd rep dict
-    return ()
-    where copyM x = httpLBS $ echoMessage x
-          upd = update cfg
-          rep = defaultRepeat cfg
-          dict = dictionary cfg
+helpMes :: Config -> Variables -> IO () 
+helpMes conf vrb = do
+    r <- mapM (hlp conf) $ helpM upd
+    mapM_ (errorResponse (loglevel conf)) r
+    let body = map getResponseBody r
+    when (((loglevel conf) <= Info) && body /= []) 
+        $ info' (loglevel conf) "Result response helpMes" 
+        >> print (body)
+    where hlp a x = httpLBS $ sendMessage a x
+          upd = update vrb
 
-helpMes :: Config -> IO () 
-helpMes cfg = do
-    mapM_ hlp $ helpM upd
-    return ()
-    where hlp x = httpLBS $ sendMessage x
-          upd = update cfg
+repeatMes :: Config -> Variables -> IO () 
+repeatMes conf vrb = do
+    r <- mapM (rept conf $ dict) $ repeatM upd
+    mapM_ (errorResponse (loglevel conf)) r
+    let body = map getResponseBody r
+    when (((loglevel conf) <= Info) && body /= []) 
+        $ info' (loglevel conf) "Result response repeatMes" 
+        >> print (body)
+    where rept a d x = httpLBS $ keyboard a d x
+          upd = update vrb
+          dict = dictionary vrb
 
-repeatMes :: Config -> IO () 
-repeatMes cfg = do
-    mapM_ repeats $ repeatM upd
-    return ()
-    where repeats x = httpLBS $ keyboard x
-          upd = update cfg
-
-callbackMes :: Config -> IO Config 
-callbackMes cfg = do
-    let dict = dictionary cfg
-        upd = update cfg
+callbackMes :: Config -> Variables -> IO Variables 
+callbackMes conf vrb = do
+    let dict = dictionary vrb
+        upd = update vrb
         query = callB upd
         dict' = execState (mapM_ mapSt $ idQuery query) dict
-    return cfg {dictionary = dict'}
+    when (((loglevel conf) <= Debug) && dict' /= dict) 
+        $ debug' (loglevel conf) "Dictiory update:" 
+        >> print (dict')
+    return vrb {dictionary = dict'}
     where 
         idQuery query = map func query
-        func x = (from_id_query x, fromJust $ data_query x)
+        func x = (from_id_query x, read $ fromJust $ data_query x :: Int)
 
-vib :: Handle -> Config -> IO B.ByteString
-vib hand conf = do
-    let id = offset conf
-    case id of
-        0 -> initBot hand
-        _ -> (updateBot hand) id
+vib :: Config -> Variables -> IO B.ByteString
+vib conf vrb = do
+    let newOffset = offset vrb
+    case newOffset of
+        0 -> response conf
+        _ -> responseOffset conf vrb
           
-startTG :: Handle -> Config -> IO ()
-startTG hand conf = do
-    res <- vib hand conf
+startTG :: Config -> Variables -> IO ()
+startTG param vrb = do
+    res <- vib param vrb
     let m = decode res :: Maybe UpdateRes
     case m of
-        Nothing -> startTG hand conf
-        Just response -> do
-            let rez = result response
+        Nothing -> do
+            when ((loglevel param) <= Debug) 
+                $ error' (loglevel param) "Response error. Stop BOT."
+            return ()
+        Just resp -> do
+            when ((loglevel param) <= Info)
+                $ info' (loglevel param) "Result response 'UpdateRes':" >> print resp    
+            let rez = result resp
             case rez of
-                [] ->  startTG hand conf
+                [] -> do
+                    when ((loglevel param) <= Debug)
+                        $ debug' (loglevel param) "Update empty. Waiting information."
+                    startTG param vrb
                 _ -> do
+                    when ((loglevel param) <= Info)
+                        $ info' (loglevel param) "Getting update. Result:" >> print rez
                     let up_id = last $ map update_id rez
-                    let conf' = conf {offset = up_id+1, update = rez}
-                    echoMes conf'
-                    helpMes conf'
-                    repeatMes conf'
-                    conf'' <- callbackMes conf'
-                    print conf''
-                    startTG hand conf''
+                        vrb' = vrb {offset = up_id+1, update = rez}
+                    when ((loglevel param) <= Debug) 
+                        $ debug' (loglevel param) "Getting new offset: " >> print up_id
+                        >> debug' (loglevel param) "Update Variables." >> print vrb'
+                    echoMes param vrb'
+                    helpMes param vrb'
+                    repeatMes param vrb'
+                    vrb'' <- callbackMes param vrb'
+                    startTG param vrb''
 
-run :: IO ()
-run = do
-    startTG newHand newConf
+errorResponse :: LogLvl -> Response a -> IO ()                       
+errorResponse lg resp = do
+    let body = getResponseStatus resp
+    when ((lg <= Error) && (statusCode body /= 200 )) 
+        $ error' lg "Response error" 
+        >> print (statusCode body)
+        >> print (statusMessage body)

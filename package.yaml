@@ -25,9 +25,11 @@ dependencies:
 - bytestring
 - text
 - http-conduit
+- http-types
 - utf8-string
 - mtl
 - containers
+- configurator
 
 default-extensions:
 - OverloadedStrings
@@ -48,6 +50,8 @@ executables:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    - -Wall
+    - -Werror
     dependencies:
     - echo-bot
 
