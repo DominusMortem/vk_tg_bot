@@ -82,16 +82,18 @@ echoM_ :: [Update] -> Int -> M.Map Int Int -> [Message]
 echoM_ upd rep dict = concat (map repeats (updates upd))
     where
         updates u = filter (\x -> text x /= (Just "/help") && 
-                                          text x /= (Just "/repeat")) 
-                                   (catMaybes $ map message u)
+                                  text x /= (Just "/repeat")) 
+                           (catMaybes $ map message u)
         repeats x = take (newRepeat x) $ repeat x
         newRepeat x = M.findWithDefault (rep)
-                                      (from_id x) dict
+                      (from_id x) dict
 helpM :: [Update] -> [Message]
-helpM upd = filter (\x -> text x == (Just "/help")) (catMaybes $ map message upd)
+helpM upd = filter (\x -> text x == (Just "/help")) 
+                   (catMaybes $ map message upd)
 
 repeatM :: [Update] -> [Message]
-repeatM upd = filter (\x -> text x == (Just "/repeat")) (catMaybes $ map message upd)
+repeatM upd = filter (\x -> text x == (Just "/repeat"))
+                     (catMaybes $ map message upd)
 
 callB :: [Update] -> [CallbackQuery]
 callB upd = (catMaybes $ map callback_query upd)
