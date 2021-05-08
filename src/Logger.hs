@@ -25,7 +25,7 @@ log' cfglog loglvl lg str
     | otherwise = return () 
 
 debug', info', warning', error' :: LogLvl -> String -> IO ()
-debug' cfglog = log' cfglog Debug "[Debug]"
-info' cfglog = log' cfglog Info "[Info]"
+debug' cfglog   = log' cfglog Debug "[Debug]"
+info' cfglog    = log' cfglog Info "[Info]"
 warning' cfglog = log' cfglog Warning "[Warning]"
-error' cfglog = log' cfglog Error "[Error]"
+error' cfglog   = log' cfglog Error "[Error]"
