@@ -8,7 +8,7 @@ module VKAPI.Methods
     , echoM
     , repeatM
     , helpM
-    )where
+    ) where
 
 import VKAPI.Types
 import Config
@@ -86,28 +86,32 @@ keyboard cfg dict upd = setRequestHost apiHost
                                , show $ numrepeat x
                                ,"\n"
                                , messagerepeat x]
-          numrepeat x = M.findWithDefault (repeats x) (from_id upd) dict
+          numrepeat x = M.findWithDefault (repeats x)
+                        (from_id upd) dict
 
 
 payloadM :: [Update] -> [Message]
-payloadM upd = filter (\x -> payload x /= Nothing) (catMaybes $ map (message . object_u) upd)
+payloadM upd = filter (\x -> payload x /= Nothing)
+                      (catMaybes $ map (message . object_u) upd)
 
 
 echoM :: [Update] -> Int -> M.Map Int Int -> [Message]
 echoM upd rep dict = concat (map repeats (updates upd))
     where
-        updates u = filter (\x -> text x /= "/help" && 
-                                          text x /= "/repeat" &&
-                                          payload x == Nothing)
-                                   (catMaybes $ map (message . object_u) u)
+        updates u = filter (\x -> text x /= "/help"
+                               && text x /= "/repeat"
+                               && payload x == Nothing)
+                           (catMaybes $ map (message . object_u) u)
         repeats x = take (newRepeat x) $ repeat x
         newRepeat x = M.findWithDefault (rep)
-                                      (from_id x) dict
+                      (from_id x) dict
 
 
 repeatM :: [Update] -> [Message]
-repeatM upd = filter (\x -> text x == "/repeat") (catMaybes $ map (message . object_u) upd)
+repeatM upd = filter (\x -> text x == "/repeat")
+                     (catMaybes $ map (message . object_u) upd)
 
 helpM :: [Update] -> [Message]
-helpM upd = filter (\x -> text x == "/help") (catMaybes $ map (message . object_u) upd)
+helpM upd = filter (\x -> text x == "/help")
+                   (catMaybes $ map (message . object_u) upd)
 
