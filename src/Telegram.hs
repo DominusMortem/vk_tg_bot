@@ -18,13 +18,14 @@ import qualified Data.ByteString.Lazy as B
 import qualified Data.Map             as M
 
 data Variables = Variables
-    { offset :: Int
+    { offset     :: Int
     , dictionary :: M.Map Int Int
-    , update :: [Update]
+    , update     :: [Update]
     } deriving (Show, Eq)
 
 newVarT :: Variables
-newVarT = Variables { offset = 0
+newVarT = Variables 
+              { offset = 0
               , dictionary = M.empty
               , update = []
               }
