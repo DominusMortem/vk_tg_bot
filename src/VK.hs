@@ -16,22 +16,22 @@ import Network.HTTP.Simple            (Response, httpLBS, getResponseBody, getRe
 import Network.HTTP.Types.Status      (statusCode, statusMessage)
 import Data.Maybe                     (fromJust)
 import Data.Aeson                     (decode)
-import qualified Data.Map             as M
 import Prelude hiding                 (error)
+import qualified Data.Map             as M
 
 data Variables = Variables
-    { session :: InitValue
+    { session    :: InitValue
     , dictionary :: M.Map Int Int
-    , update :: [Update]
-    , vkerror :: String
+    , update     :: [Update]
+    , vkerror    :: String
     } deriving (Show, Eq)
 
 newVar :: Variables
 newVar = Variables
-    { session = InitValue "" "" ""
+    { session    = InitValue "" "" ""
     , dictionary = M.empty
-    , update = []
-    , vkerror = ""
+    , update     = []
+    , vkerror    = ""
     }
 
 payloadMes :: Config -> Variables -> IO Variables 
