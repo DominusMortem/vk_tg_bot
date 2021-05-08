@@ -10,19 +10,19 @@ import Data.Configurator as C
 import qualified Data.Text as T
 
 data Config = Config
-    { api :: !String
-    , group_id :: !Int
-    , loglevel :: !LogLvl
-    , token :: !String
-    , repeats :: !Int
-    , messagehelp :: !String
+    { api           :: !String
+    , group_id      :: !Int
+    , loglevel      :: !LogLvl
+    , token         :: !String
+    , repeats       :: !Int
+    , messagehelp   :: !String
     , messagerepeat :: !String
-    , timeout :: !Int
+    , timeout       :: !Int
     } deriving (Show, Eq)
 
 getConfig :: IO Config
 getConfig = do
-    conf <- C.load [C.Optional "bot.conf"]
+    conf <- C.load [C.Optional "bot.conf", C.Optional "botlocal.conf"]
     logstr <- C.lookupDefault "Off" conf (T.pack "loglevel") :: IO String
     let loglevel = case logstr of
                         "Debug"   -> Debug
