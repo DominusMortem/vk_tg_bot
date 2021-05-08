@@ -25,9 +25,9 @@ data Variables = Variables
 
 newVarT :: Variables
 newVarT = Variables 
-              { offset = 0
+              { offset     = 0
               , dictionary = M.empty
-              , update = []
+              , update     = []
               }
 
 response :: Config -> IO B.ByteString
